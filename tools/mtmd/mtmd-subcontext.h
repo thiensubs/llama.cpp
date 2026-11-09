@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <optional>
 #include <memory>
 #include <random>
 #include <vector>
@@ -200,5 +201,5 @@ private:
     mtmd_image_f32_batch get_dummy_batch() const;
 
     // only initialize backend buffers, but do not allocate them yet
-    support_info_graph reserve_compute_meta(const mtmd_image_f32_batch & batch);
+    std::optional<support_info_graph> reserve_compute_meta(const mtmd_image_f32_batch & batch);
 };
