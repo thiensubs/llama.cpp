@@ -179,7 +179,13 @@ void mtmd_subcontext::warmup(const mtmd_image_f32_batch & batch) {
     if (flash_attn_type == MTMD_FLASH_ATTN_TYPE_AUTO) {
         // try to enable flash attention to see if it's supported
         flash_attn_type = MTMD_FLASH_ATTN_TYPE_ENABLED;
-        info = reserve_compute_meta(batch);
+        {
+            auto info_opt = reserve_compute_meta(batch);
+            if (!info_opt) {
+                throw std::runtime_error("clip: failed to reserve compute buffers");
+            }
+            info = *info_opt;
+        }
         if (!info.fattn && info.fattn_op) {
             auto op = info.fattn_op;
             LOG_WRN("%s: *****************************************************************\n", __func__);
@@ -198,10 +204,18 @@ void mtmd_subcontext::warmup(const mtmd_image_f32_batch & batch) {
             LOG_WRN("%s: please report this on github as an issue\n", __func__);
             LOG_WRN("%s: *****************************************************************\n", __func__);
             flash_attn_type = MTMD_FLASH_ATTN_TYPE_DISABLED;
-            reserve_compute_meta(batch);
+            if (!reserve_compute_meta(batch)) {
+                throw std::runtime_error("clip: failed to reserve compute buffers");
+            }
         }
     } else {
-        info = reserve_compute_meta(batch);
+        {
+            auto info_opt = reserve_compute_meta(batch);
+            if (!info_opt) {
+                throw std::runtime_error("clip: failed to reserve compute buffers");
+            }
+            info = *info_opt;
+        }
         if (!info.fattn && flash_attn_type == MTMD_FLASH_ATTN_TYPE_ENABLED) {
             LOG_WRN("%s: flash attention is not supported by the current backend; falling back to CPU (performance will be degraded)\n", __func__);
         }
@@ -240,9 +254,11 @@ void mtmd_subcontext::warmup(const mtmd_image_f32_batch & batch) {
     }
 }
 
-mtmd_subcontext::support_info_graph mtmd_subcontext::reserve_compute_meta(const mtmd_image_f32_batch & batch) {
+std::optional<mtmd_subcontext::support_info_graph> mtmd_subcontext::reserve_compute_meta(const mtmd_image_f32_batch & batch) {
     ggml_cgraph * gf = mtmd_get_graph_builder(this, batch)->build();
-    ggml_backend_sched_reserve(backends.sched.get(), gf);
+    if (!ggml_backend_sched_reserve(backends.sched.get(), gf)) {
+        return std::nullopt;
+    }
 
     const int n_splits = ggml_backend_sched_get_n_splits(backends.sched.get());
     const int n_nodes  = ggml_graph_n_nodes(gf);
